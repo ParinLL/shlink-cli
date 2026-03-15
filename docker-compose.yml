@@ -1,0 +1,8 @@
+services:
+  shlink-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - SHLINK_BASE_URL=${SHLINK_BASE_URL}
+      - SHLINK_API_KEY=${SHLINK_API_KEY}
