@@ -2,6 +2,22 @@
 
 A command-line tool for the Shlink URL shortener, built on the [Shlink REST API v3](https://api-spec.shlink.io/).
 
+## Use With OpenClaw
+
+This repository includes a publish-ready skill file at [`clawhub-publish/SKILL.md`](./clawhub-publish/SKILL.md).
+
+ClawHub page:
+
+- https://clawhub.ai/ParinLL/shlink-cli
+
+Install from ClawHub:
+
+```bash
+clawhub install shlink-cli
+```
+
+This is an instruction-only skill package (contains only `SKILL.md`) and guides users to install `shlink-cli` from GitHub.
+
 ## Environment Variables
 
 ```bash
