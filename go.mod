@@ -1,4 +1,4 @@
-module shlink-cli
+module github.com/ParinLL/shlink-cli
 
 go 1.24
 

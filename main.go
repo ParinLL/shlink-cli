@@ -1,6 +1,6 @@
 package main
 
-import "shlink-cli/cmd"
+import "github.com/ParinLL/shlink-cli/cmd"
 
 func main() {
 	cmd.Execute()

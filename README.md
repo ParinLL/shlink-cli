@@ -45,7 +45,7 @@ sudo mv shlink-cli /usr/local/bin/
 Or use `go install`:
 
 ```bash
-go install shlink-cli@latest
+go install github.com/ParinLL/shlink-cli@latest
 ```
 
 ## Docker Usage

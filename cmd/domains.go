@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"shlink-cli/internal/client"
+	"github.com/ParinLL/shlink-cli/internal/client"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
