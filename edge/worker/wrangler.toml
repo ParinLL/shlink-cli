@@ -1,0 +1,20 @@
+name = "shlink-edge-guard"
+main = "src/index.mjs"
+compatibility_date = "2026-06-10"
+workers_dev = false
+
+route = { pattern = "parin.dev/*", zone_name = "parin.dev" }
+
+[[kv_namespaces]]
+binding = "SHORT_CODES"
+id = "98f21a65f0744c36b771cd9b0ae7adfc"
+
+[vars]
+EDGE_GUARD_HOSTS = "parin.dev"
+KV_KEY_PREFIX = "shlink"
+EDGE_GUARD_ALLOW_EXTRA_PATH = "true"
+EDGE_GUARD_FAIL_OPEN = "true"
+EDGE_GUARD_BLOCK_STATUS = "404"
+EDGE_GUARD_KV_CACHE_TTL = "60"
+EDGE_GUARD_RESERVED_PREFIXES = ""
+EDGE_GUARD_RESERVED_PATHS = ""

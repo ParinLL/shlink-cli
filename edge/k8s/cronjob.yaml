@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: shlink-edge-sync
+  namespace: shlink
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: sync
+              image: harbor.x300-local.parinl.com/shlink-security/shlink-edge-sync:0.3
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - configMapRef:
+                    name: shlink-edge-sync
+                - secretRef:
+                    name: shlink-edge-sync
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 64Mi
+                limits:
+                  cpu: 250m
+                  memory: 256Mi

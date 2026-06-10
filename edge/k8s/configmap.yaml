@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shlink-edge-sync
+  namespace: shlink
+data:
+  SHLINK_DEFAULT_DOMAIN: "parin.dev"
+  KV_KEY_PREFIX: "shlink"
+  KV_EXPIRATION_TTL: "86400"
+  CF_KV_BATCH_SIZE: "9000"
+  # Override only if your Shlink DB schema uses different table/column names.
+  # SHLINK_SHORT_CODES_SQL: |
+  #   SELECT 'parin.dev' AS domain, short_code FROM short_urls ORDER BY 1, 2;
