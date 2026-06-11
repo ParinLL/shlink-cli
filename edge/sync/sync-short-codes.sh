@@ -7,8 +7,6 @@ set -eu
 : "${CF_KV_NAMESPACE_ID:?CF_KV_NAMESPACE_ID is required}"
 : "${SHLINK_DEFAULT_DOMAIN:=parin.dev}"
 : "${KV_KEY_PREFIX:=shlink}"
-: "${KV_EXPIRATION_TTL:=86400}"
-: "${CF_KV_BATCH_SIZE:=9000}"
 
 DEFAULT_SQL='
 SELECT
@@ -44,45 +42,65 @@ if [ "$TOTAL_ROWS" = "0" ]; then
   exit 0
 fi
 
-echo "Uploading $TOTAL_ROWS short-code keys to Cloudflare KV"
-split -l "$CF_KV_BATCH_SIZE" "$ROWS_FILE" "$WORKDIR/batch."
+cut -f 1 "$ROWS_FILE" | sort -u > "$WORKDIR/domains.txt"
 
-BATCH_COUNT=0
-for batch in "$WORKDIR"/batch.*; do
-  BATCH_COUNT=$((BATCH_COUNT + 1))
-  BODY_FILE="$WORKDIR/body.$BATCH_COUNT.json"
-  RESPONSE_FILE="$WORKDIR/response.$BATCH_COUNT.json"
+UPDATED=0
+UNCHANGED=0
+while IFS= read -r domain; do
+  [ -n "$domain" ] || continue
+
+  MANIFEST_FILE="$WORKDIR/manifest.json"
+  MANIFEST_RAW_FILE="$WORKDIR/manifest.raw.json"
+  CURRENT_FILE="$WORKDIR/current.json"
+  KV_KEY="$KV_KEY_PREFIX:v2:$(printf '%s' "$domain" | tr '[:upper:]' '[:lower:]')"
+  ENCODED_KEY="$(printf '%s' "$KV_KEY" | jq -sRr @uri)"
+  VALUE_URL="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$CF_KV_NAMESPACE_ID/values/$ENCODED_KEY"
 
   jq -Rsc \
-    --arg prefix "$KV_KEY_PREFIX" \
-    --argjson ttl "$KV_EXPIRATION_TTL" \
+    --arg domain "$domain" \
     '
       split("\n")
-      | map(select(length > 0))
-      | map(
-          split("\t") as $row
-          | {
-              key: ($prefix + ":v1:" + ($row[0] | ascii_downcase) + ":" + $row[1]),
-              value: "1"
-            }
-            + if $ttl > 0 then { expiration_ttl: $ttl } else {} end
-        )
-    ' "$batch" > "$BODY_FILE"
+      | map(select(length > 0) | split("\t"))
+      | map(select((.[0] | ascii_downcase) == ($domain | ascii_downcase)) | .[1])
+      | unique
+      | {
+          version: 2,
+          codes: (reduce .[] as $code ({}; .[$code] = true))
+        }
+    ' "$ROWS_FILE" > "$MANIFEST_RAW_FILE"
+
+  jq -eSc '
+    if .version == 2 and (.codes | type) == "object"
+    then .
+    else error("invalid KV manifest")
+    end
+  ' "$MANIFEST_RAW_FILE" > "$MANIFEST_FILE"
+
+  if curl -fsS \
+    "$VALUE_URL" \
+    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+    -o "$CURRENT_FILE"; then
+    jq -Sc . "$CURRENT_FILE" > "$CURRENT_FILE.normalized"
+  else
+    printf '{}\n' > "$CURRENT_FILE.normalized"
+  fi
+
+  if cmp -s "$MANIFEST_FILE" "$CURRENT_FILE.normalized"; then
+    UNCHANGED=$((UNCHANGED + 1))
+    echo "No KV change for $domain"
+    continue
+  fi
 
   curl -fsS \
-    "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$CF_KV_NAMESPACE_ID/bulk" \
+    "$VALUE_URL" \
     -X PUT \
     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
     -H "Content-Type: application/json" \
-    --data-binary "@$BODY_FILE" > "$RESPONSE_FILE"
+    --data-binary "@$MANIFEST_FILE" >/dev/null
 
-  jq -e '
-    .success == true
-    and ((.result.unsuccessful_keys // []) | length == 0)
-  ' "$RESPONSE_FILE" >/dev/null
+  UPDATED=$((UPDATED + 1))
+  CODE_COUNT="$(jq '.codes | length' "$MANIFEST_FILE")"
+  echo "Updated $domain manifest with $CODE_COUNT short codes"
+done < "$WORKDIR/domains.txt"
 
-  KEYS_IN_BATCH="$(jq 'length' "$BODY_FILE")"
-  echo "Uploaded batch $BATCH_COUNT with $KEYS_IN_BATCH keys"
-done
-
-echo "Completed Cloudflare KV short-code sync"
+echo "Completed Cloudflare KV sync: updated=$UPDATED unchanged=$UNCHANGED"

@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { handleRequest, classifyPath, buildLookupKeys } from "./src/index.mjs";
+import {
+  handleRequest,
+  classifyPath,
+  buildLookupKeys,
+  buildManifestKey,
+} from "./src/index.mjs";
 
 const originFetch = globalThis.fetch;
 globalThis.fetch = async () => new Response("origin", { status: 200 });
@@ -10,8 +15,30 @@ function envWithCodes(codes) {
     EDGE_GUARD_HOSTS: "parin.dev",
     KV_KEY_PREFIX: "shlink",
     SHORT_CODES: {
-      async get(key) {
+      async get(key, options) {
+        if (options?.type === "json") {
+          return null;
+        }
         return values.has(key) ? "1" : null;
+      },
+    },
+  };
+}
+
+function envWithManifest(codes) {
+  const manifest = {
+    version: 2,
+    codes: Object.fromEntries(codes.map((code) => [code, true])),
+  };
+  return {
+    EDGE_GUARD_HOSTS: "parin.dev",
+    KV_KEY_PREFIX: "shlink",
+    SHORT_CODES: {
+      async get(key, options) {
+        if (key === "shlink:v2:parin.dev" && options?.type === "json") {
+          return manifest;
+        }
+        return null;
       },
     },
   };
@@ -25,17 +52,24 @@ try {
   assert.deepEqual(classifyPath("/abc").candidates, ["abc"]);
   assert.deepEqual(classifyPath("/abc/extra").candidates, ["abc/extra", "abc"]);
   assert.deepEqual(buildLookupKeys("parin.dev", ["abc"], {}).at(0), "shlink:v1:parin.dev:abc");
+  assert.equal(buildManifestKey("parin.dev", {}), "shlink:v2:parin.dev");
 
   let response = await handleRequest(
     new Request("https://parin.dev/abc"),
-    envWithCodes(["shlink:v1:parin.dev:abc"]),
+    envWithManifest(["abc"]),
   );
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "origin");
 
   response = await handleRequest(
     new Request("https://parin.dev/abc/anything"),
-    envWithCodes(["shlink:v1:parin.dev:abc"]),
+    envWithManifest(["abc"]),
+  );
+  assert.equal(response.status, 200);
+
+  response = await handleRequest(
+    new Request("https://parin.dev/legacy"),
+    envWithCodes(["shlink:v1:parin.dev:legacy"]),
   );
   assert.equal(response.status, 200);
 

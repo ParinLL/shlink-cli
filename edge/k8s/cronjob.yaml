@@ -16,7 +16,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: sync
-              image: harbor.x300-local.parinl.com/shlink-security/shlink-edge-sync:0.3
+              image: harbor.x300-local.parinl.com/shlink-security/shlink-edge-sync:0.6
               imagePullPolicy: IfNotPresent
               envFrom:
                 - configMapRef:

@@ -96,11 +96,13 @@ Worker 會用 Cloudflare KV 作為 short-code allowlist：
 無效 short code -> Cloudflare Worker 直接回 404
 ```
 
-同步器每 5 分鐘從 Shlink Postgres 匯出有效 short code，寫入 KV key：
+同步器每 5 分鐘從 Shlink Postgres 匯出有效 short code，並為每個 domain 維護一個 KV manifest：
 
 ```text
-shlink:v1:<host>:<short_code>
+shlink:v2:<host>
 ```
+
+同步器會先讀取現有 manifest，比對內容後只有在 short code 新增或刪除時才執行 PUT，避免每輪重寫所有 key 而超過 Workers KV 免費方案的每日 write 限額。
 
 ### Edge Guard 部署摘要
 
@@ -115,8 +117,8 @@ npm run deploy
 Build 並 push 同步器 image：
 
 ```bash
-nerdctl.lima build --platform linux/amd64,linux/arm64 -t harbor.x300-local.parinl.com/shlink-security/shlink-edge-sync:0.3 edge/sync
-nerdctl.lima push --all-platforms harbor.x300-local.parinl.com/shlink-security/shlink-edge-sync:0.3
+nerdctl.lima build --platform linux/amd64,linux/arm64 -t harbor.x300-local.parinl.com/shlink-security/shlink-edge-sync:0.6 edge/sync
+nerdctl.lima push --all-platforms harbor.x300-local.parinl.com/shlink-security/shlink-edge-sync:0.6
 ```
 
 套用 k3s/EKS 資源：

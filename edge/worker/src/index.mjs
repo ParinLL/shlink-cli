@@ -40,9 +40,8 @@ export async function handleRequest(request, env) {
     return fetch(request);
   }
 
-  const keys = buildLookupKeys(host, decision.candidates, env);
   try {
-    if (await hasAnyKey(env.SHORT_CODES, keys, cacheTtl(env))) {
+    if (await hasAnyShortCode(env.SHORT_CODES, host, decision.candidates, env)) {
       return fetch(request);
     }
   } catch (error) {
@@ -116,6 +115,11 @@ export function buildLookupKeys(host, candidates, env = {}) {
   return candidates.map((candidate) => `${prefix}:v1:${host}:${candidate}`);
 }
 
+export function buildManifestKey(host, env = {}) {
+  const prefix = stringEnv(env.KV_KEY_PREFIX, DEFAULT_KV_PREFIX);
+  return `${prefix}:v2:${host}`;
+}
+
 function isProtectedHost(host, env) {
   const hosts = csvEnv(env.EDGE_GUARD_HOSTS, DEFAULT_HOSTS).map((value) =>
     value.toLowerCase(),
@@ -123,12 +127,21 @@ function isProtectedHost(host, env) {
   return hosts.includes(host);
 }
 
-async function hasAnyKey(kv, keys, ttl) {
+async function hasAnyShortCode(kv, host, candidates, env) {
   if (!kv || typeof kv.get !== "function") {
     throw new Error("SHORT_CODES KV binding is missing");
   }
 
-  for (const key of keys) {
+  const ttl = cacheTtl(env);
+  const manifest = await kv.get(buildManifestKey(host, env), {
+    cacheTtl: ttl,
+    type: "json",
+  });
+  if (manifest?.version === 2 && manifest.codes) {
+    return candidates.some((candidate) => manifest.codes[candidate] === true);
+  }
+
+  for (const key of buildLookupKeys(host, candidates, env)) {
     const value = await kv.get(key, { cacheTtl: ttl });
     if (value !== null) {
       return true;

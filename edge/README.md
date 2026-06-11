@@ -8,7 +8,7 @@
 EKS Postgres -> sync CronJob -> Cloudflare Workers KV -> Worker on parin.dev/* -> Shlink origin
 ```
 
-Worker 只檢查可能是短網址的路徑。根路徑、Shlink REST/admin 類型路徑，以及常見 static path 會直接放行到 origin。其他路徑會查詢 KV 裡的 `shlink:v1:<host>:<short_code>`。如果沒有找到 key，Worker 會直接在 Cloudflare 回 `404`，Shlink 就不會記錄 orphan visit。
+Worker 只檢查可能是短網址的路徑。其他路徑會查詢 KV 裡的 `shlink:v2:<host>` manifest；manifest 內沒有對應 short code 時，Worker 會直接在 Cloudflare 回 `404`，Shlink 就不會記錄 orphan visit。
 
 ## Cloudflare 設定
 
@@ -53,8 +53,8 @@ http.host eq "parin.dev" and (
 1. Build 並 push 同步用 image：
 
 ```bash
-nerdctl.lima build --platform linux/amd64,linux/arm64 -t harbor.x300-local.parinl.com/shlink-security/shlink-edge-sync:0.3 edge/sync
-nerdctl.lima push --all-platforms harbor.x300-local.parinl.com/shlink-security/shlink-edge-sync:0.3
+nerdctl.lima build --platform linux/amd64,linux/arm64 -t harbor.x300-local.parinl.com/shlink-security/shlink-edge-sync:0.6 edge/sync
+nerdctl.lima push --all-platforms harbor.x300-local.parinl.com/shlink-security/shlink-edge-sync:0.6
 ```
 
 2. 依照 `edge/k8s/secret.example.yaml` 建立同步用 Secret。必要值如下：
@@ -125,8 +125,18 @@ curl -i https://parin.dev/graphql
 x-shlink-edge-guard: blocked
 ```
 
-## 注意事項
+## KV 免費方案用量
 
-KV value 會使用 `expiration_ttl=86400`，CronJob 每 5 分鐘刷新一次。這樣可以避免某次同步意外匯出空資料時，立刻把所有允許的 short code 都刪掉。相對地，已刪除的 Shlink URL 可能會在 KV TTL 到期前仍被 edge 放行。
+同步器不再為每個 short code 建立和刷新獨立 KV key。每個 domain 只使用一個 manifest：
+
+```text
+shlink:v2:<host>
+```
+
+CronJob 每 5 分鐘讀取現有 manifest 並與 Postgres 結果比較。內容沒有變化時不執行 PUT；新增或刪除 short code 時，每個受影響 domain 只會產生一次 PUT。這可避免超過 Workers KV 免費方案每天 1,000 次 write 的限制。
+
+為避免 Postgres query 意外回傳空資料時清空 allowlist，同步器在完全沒有 short code 時會跳過更新。
+
+## 注意事項
 
 如果你的 Shlink DB schema 跟預設 query 不同，請在 `edge/k8s/configmap.yaml` 設定 `SHLINK_SHORT_CODES_SQL`。查詢結果必須依序回傳 `domain` 與 `short_code` 兩個欄位。
